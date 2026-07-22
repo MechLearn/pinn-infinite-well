@@ -8,3 +8,7 @@ outputs/
 *.pth
 wandb/
 .env
+*.aux
+*.log
+*.out
+*.toc
