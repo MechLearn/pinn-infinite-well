@@ -32,8 +32,30 @@ def run_one_mode_learnE(n: int, cfg: dict):
     LR0      = 3e-4  if n >= 4 else (5e-4 if n == 3 else (7e-4 if n == 2 else 1e-3))
     lam_hi, lam_lo = (300.0, 80.0) if n >= 3 else (40.0, 15.0 if n == 2 else 10.0)
 
+    # OE2: ruido en puntos de colocación. sigma=0.0 reproduce exactamente el
+    # comportamiento de OE1 (baseline), por lo que esta función sirve para
+    # ambos experimentos.
+    NOISE_SIGMA    = float(cfg.get("noise_sigma", 0.0))
+    NOISE_RESAMPLE = bool(cfg.get("noise_resample_every_epoch", False))
+
     net    = make_net(n=n, hidden=HIDDEN, use_sine=USE_SINE).to(DEVICE)
     x_col  = torch.linspace(0, 1, N_col, dtype=torch.float32).reshape(-1, 1).to(DEVICE)
+
+    def apply_noise(x):
+        if NOISE_SIGMA <= 0.0:
+            return x
+        eta = torch.randn_like(x) * NOISE_SIGMA
+        x_noisy = torch.clamp(x + eta, 0.0, 1.0)
+        # La integral de normalización en losses.py usa la regla del trapecio,
+        # que asume x ordenado. Hay que reordenar tras perturbar, si no la
+        # integral calculada durante el entrenamiento queda mal definida.
+        x_noisy, _ = torch.sort(x_noisy, dim=0)
+        return x_noisy
+
+    if NOISE_SIGMA > 0.0 and not NOISE_RESAMPLE:
+        # Perturbación fija por corrida: x_col = x_col + eta, eta ~ N(0, sigma^2)
+        x_col = apply_noise(x_col)
+
     E_init = float((n * math.pi) ** 2)
     alpha  = torch.tensor(E_init, dtype=torch.float32, device=DEVICE, requires_grad=True)
     params = list(net.parameters()) + [alpha]
@@ -51,8 +73,10 @@ def run_one_mode_learnE(n: int, cfg: dict):
         for pg in opt.param_groups:
             pg["lr"] = get_lr(ep)
 
+        x_step = apply_noise(x_col) if (NOISE_SIGMA > 0.0 and NOISE_RESAMPLE) else x_col
+
         opt.zero_grad()
-        L, LPDE, Lnorm, integral, E = compute_losses(net, x_col, alpha, lam)
+        L, LPDE, Lnorm, integral, E = compute_losses(net, x_step, alpha, lam)
         L.backward()
         torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
         opt.step()
@@ -114,6 +138,7 @@ def run_one_mode_learnE(n: int, cfg: dict):
         "final_loss": loss_total[-1], "final_pde": loss_pde[-1], "final_norm": loss_norm[-1],
         "epochs": EPOCHS, "N_col": N_col, "hidden": HIDDEN, "use_sine": USE_SINE,
         "lam_hi": lam_hi, "lam_lo": lam_lo, "lr0": LR0, "device": str(DEVICE),
+        "noise_sigma": NOISE_SIGMA, "noise_resample_every_epoch": NOISE_RESAMPLE,
     }
     with open(os.path.join(save_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)

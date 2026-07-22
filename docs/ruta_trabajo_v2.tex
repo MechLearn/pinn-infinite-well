@@ -1,0 +1,191 @@
+\documentclass[11pt]{article}
+\usepackage{cmap}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=1in,headheight=14pt]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage[colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue]{hyperref}
+\usepackage{xcolor}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textit{PINNs Espectrales}}
+\fancyhead[R]{Plan de Investigación v2}
+\fancyfoot[C]{\thepage}
+
+\newcommand{\done}{\textcolor{green!50!black}{\textbf{[Hecho]}}}
+\newcommand{\pdone}{\textcolor{orange!80!black}{\textbf{[Parcial]}}}
+\newcommand{\pending}{\textcolor{red!70!black}{\textbf{[Pendiente]}}}
+\newcommand{\progress}{\textcolor{blue!60!black}{\textbf{[En curso]}}}
+\newcommand{\optional}{\textcolor{gray}{\textbf{[Opcional]}}}
+
+\title{Plan de Trabajo y Ruta de Investigación (v2)\\
+\large Neural Spectral PINNs para Problemas Cuánticos 1D\\
+\normalsize Reestructuración en tres frentes, alineada al anteproyecto}
+\author{David Steven Maldonado Aponte}
+\date{21 de julio de 2026}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{Objetivo General}
+
+Desarrollar y validar un marco basado en Physics-Informed Neural Networks (PINNs) para
+la ecuación de Schrödinger unidimensional, incorporando un esquema de filtrado/robustez
+y una formulación de inferencia variacional (VI-PINN), con el propósito de analizar la
+cuantificación de incertidumbre en tres sistemas cuánticos canónicos: el pozo infinito,
+el pozo finito y el oscilador armónico.
+
+\section{Problema Base}
+
+Se estudia la ecuación de Schrödinger independiente del tiempo,
+\[
+\hat{H}\psi(x) = E\psi(x), \qquad \hat{H} = -\frac{d^2}{dx^2} + V(x),
+\]
+con condiciones de frontera apropiadas y normalización $\int |\psi(x)|^2\,dx = 1$.
+
+\section{Diagnóstico: alineación con el anteproyecto}
+
+Esta versión (v2) reemplaza al plan anterior tras un cruce detallado contra el
+anteproyecto oficial (nov. 2025). Tres hallazgos motivan la reestructuración:
+
+\begin{enumerate}
+    \item \textbf{``Barrera de potencial'' es un error de redacción.} El anteproyecto
+    nombra ``pozo infinito, barrera de potencial y oscilador armónico'', pero la
+    barrera no es un problema de eigenvalores (es scattering, sin estados ligados).
+    El tercer caso canónico real, y el que siempre se quiso decir, es el
+    \textbf{pozo finito}.
+    \item \textbf{El filtro de Kalman no es estructuralmente obligatorio.} Aparece
+    explícito en resumen, palabras clave, introducción y marco teórico, pero
+    \emph{no} en la hipótesis (11.1) ni en el objetivo específico 2, que solo pide
+    genéricamente un ``esquema de filtrado''. Se sustituye por los mecanismos que
+    realmente se desarrollaron: cociente de Rayleigh y ruido en puntos de colación.
+    El documento final de tesis se ajustará para no nombrar Kalman específicamente.
+    \item \textbf{VI-PINN sí es estructuralmente obligatorio.} Aparece en la
+    hipótesis, el objetivo general, el objetivo específico 3 y el título mismo del
+    anteproyecto. No es sustituible por ensembles sin reescribir el anteproyecto.
+\end{enumerate}
+
+Adicionalmente, la metodología (\S12.1) condiciona la extensión del filtrado y de
+VI-PINN a otros potenciales según ``el avance del proyecto'', lo que permite
+concentrar la profundidad en un solo caso principal sin incumplir el objetivo
+general.
+
+\section{Frente 1 -- Baseline determinista en los tres casos canónicos (OE1)}
+
+Obligatorio para la maestría. Cubre literalmente el objetivo específico 1.
+
+\subsection{Pozo infinito \done}
+Parámetro libre $E$ (softplus), arquitecturas A1 (128) / A2 (256), ansatz espectral
+$x(1-x)F_n(x)\mathcal{F}(x;\theta)$. Resultado: colapso binario (A1 en $n^*=14$, A2 en
+$n^*=9$). Paper 1, aceptado en WEA 2026 (Springer CCIS).
+
+\subsection{Oscilador armónico \pdone}
+Mismo método aplicado a $V(x)=\tfrac{1}{2}x^2$. Resultado: convergencia a modo
+incorrecto (firma $L^2\approx\sqrt{2}$), no colapso. Paper 2 en borrador. Pendiente:
+deflación espectral para resolver el modo incorrecto (ver Frente 3).
+
+\subsection{Pozo finito \pending}
+No implementado. Requiere energías ligadas vía ecuación trascendental
+($\sqrt{V_0-E}\tan(\cdot) = \sqrt{E}$ / $\cot(\cdot)$), PINN determinista, validación
+contra referencia numérica.
+
+\section{Frente 2 -- Profundización en el caso principal: pozo infinito (OE2 + OE3)}
+
+Lo mínimo adicional que cumple el anteproyecto más allá del baseline. Es el frente
+crítico de cara a la sustentación.
+
+\subsection{OE2 -- Esquema de filtrado y robustez}
+
+\begin{itemize}
+    \item \textbf{Cociente de Rayleigh \done.} Experimentos completos (A1/A2,
+    $n=1$--$30$, 5 seeds) en \texttt{pinn-schrodinger-rayleigh}. Mejora medible de
+    estabilidad: el límite de colapso se extiende de $n\approx13$ a $n\approx27$--$30$.
+    Se reencuadra como el mecanismo real de OE2. Pendiente: migrar a
+    \texttt{pinn-infinite-well/experiments/rayleigh/} y redactar el Paper 3.
+    \item \textbf{Ruido en puntos de colación \progress.} Implementado en
+    \texttt{train.py} (\texttt{configs/noise.yaml},
+    \texttt{scripts/run\_sweep\_noise.py}), $\eta\sim\mathcal{N}(0,\sigma^2)$ sobre la
+    grilla, con reordenamiento tras la perturbación (bug corregido). Pendiente:
+    barrido completo (A1, $\sigma\in\{0, 0.01, 0.05, 0.1\}$, $n=1$--$20$, 5 seeds) y
+    análisis.
+    \item \textbf{Filtro de Kalman \optional (descartado del alcance formal).} No
+    se implementa; se documenta la razón en \S3.
+\end{itemize}
+
+\subsection{OE3 -- VI-PINN}
+
+\pending\ \textbf{Prioridad crítica.} Pendiente: teoría (ELBO, pesos como
+distribución $q(\theta)$, priors), implementación sobre el pozo infinito, pilotos en
+modos representativos, comparación de bandas de incertidumbre contra parámetro libre
+y Rayleigh.
+
+\section{Frente 3 -- Ruta expandida (ambición personal / línea doctoral)}
+
+\optional\ No bloqueante para la maestría. Proyección hacia una línea doctoral en
+métodos variacionales neuronales; replica el pipeline completo en cada caso canónico.
+
+\subsection{Pozo infinito (extensión)}
+Deflación/ortogonalidad (opcional aquí, el ansatz ya evita el modo incorrecto);
+ensembles como comparación adicional frente a VI-PINN.
+
+\subsection{Oscilador armónico (ruta propia)}
+Deflación espectral (\textbf{necesaria} para cerrar el Paper 2); Rayleigh +
+deflación; ruido en colación; VI-PINN.
+
+\subsection{Pozo finito (ruta propia)}
+Rayleigh; ruido en colación; VI-PINN.
+
+\section{Obligatorio vs. opcional}
+
+\begin{center}
+\begin{tabular}{p{0.46\textwidth} p{0.46\textwidth}}
+\toprule
+\textbf{Obligatorio (Frentes 1 y 2)} & \textbf{Opcional / trabajo futuro (Frente 3)} \\
+\midrule
+Baseline en pozo finito &
+Deflación en oscilador armónico \\[4pt]
+Barrido completo de ruido (pozo infinito) &
+Réplica completa de Rayleigh + ruido + VI-PINN en oscilador y pozo finito \\[4pt]
+Migrar y redactar Rayleigh (Paper 3) &
+Ensembles comparativos \\[4pt]
+VI-PINN en pozo infinito (OE3) & \\[4pt]
+Corregir documento final: barrera$\to$pozo finito, quitar menciones a Kalman & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Estado actual}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Objetivo} & \textbf{Caso} & \textbf{Estado} \\
+\midrule
+OE1 & Pozo infinito & \done\ 100\% \\
+OE1 & Oscilador armónico & \pdone\ $\sim$85\% (falta deflación) \\
+OE1 & Pozo finito & \pending\ 0\% \\
+OE2 & Rayleigh (pozo infinito) & \pdone\ $\sim$90\% (falta migrar y redactar) \\
+OE2 & Ruido en colación (pozo infinito) & \progress\ $\sim$50\% (falta barrido) \\
+OE3 & VI-PINN (pozo infinito) & \pending\ 0\% -- \textbf{crítico} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Notas finales}
+
+Este documento sustituye a la versión anterior (\texttt{main-2.pdf}) al separar
+explícitamente lo que exige el anteproyecto de la maestría (Frentes 1 y 2) de la
+ambición personal de investigación (Frente 3). La lógica ``rigurosa vs.\ práctica''
+de la versión previa queda absorbida: el Frente 2 \emph{es} la versión rigurosa
+mínima que cumple el anteproyecto, y el Frente 3 es la extensión sin restricción de
+tiempo hacia una eventual línea doctoral.
+
+\end{document}

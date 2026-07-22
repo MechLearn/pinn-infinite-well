@@ -1,5 +1,5 @@
-from pinn1d.InfiniteWell.config import load_config
-from pinn1d.InfiniteWell.train import run_one_mode_learnE
+from pinn1d.config import load_config
+from pinn1d.train import run_one_mode_learnE
 import tensorflow as tf
 import sys
 

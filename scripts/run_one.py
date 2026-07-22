@@ -1,10 +1,10 @@
-from pinn1d.InfiniteWell.config import load_config
-from pinn1d.InfiniteWell.train import run_one_mode_learnE
+from pinn1d.config import load_config
+from pinn1d.train import run_one_mode_learnE
 import torch
 import sys
 
 if __name__ == "__main__":
-    cfg = load_config("configs/InfiniteWell/base.yaml")
+    cfg = load_config("configs/base.yaml")
 
     if len(sys.argv) < 2:
         print("Uso: python scripts/InfiniteWell/run_one.py <n>")
