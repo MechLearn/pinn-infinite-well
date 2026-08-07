@@ -1,8 +1,7 @@
 # src/pinn1d/InfiniteWell/losses.py
 
 import torch
-from .derivatives import second_derivative
-
+from ..derivatives import second_derivative
 
 def compute_losses(model, x_batch, alpha, lam):
     """

@@ -1,3 +1,4 @@
+# scripts/summarize_metrics.py
 import os
 import json
 import glob
@@ -11,19 +12,13 @@ def is_collapse(m: dict, integral_thr=0.2, l2_thr=0.5) -> bool:
     """Criterio operativo de colapso (ajustable)."""
     integral = float(m.get("integral", np.nan))
     l2 = float(m.get("L2", np.nan))
-    # Colapso si integral muy bajo Y L2 muy alto (solución ~0 o forma mala)
     return (integral < integral_thr) and (l2 > l2_thr)
 
 
-def main():
-    base = "outputs/runs"
-    pattern = os.path.join(base, "*_seed*", "mode_*", "metrics.json")
+def collect_formulation(formulation: str, base_pattern: str):
+    """Busca metrics.json bajo outputs/InfiniteWell/{base_pattern}/{formulation}/..."""
+    pattern = os.path.join(base_pattern, formulation, "*_seed*", "mode_*", "metrics.json")
     files = sorted(glob.glob(pattern))
-
-    if not files:
-        print(f"No encontré metrics.json con patrón: {pattern}")
-        return
-
     rows = []
     for fp in files:
         with open(fp, "r") as f:
@@ -34,29 +29,44 @@ def main():
         n = int(m.get("n", -1))
 
         rows.append({
+            "formulation": formulation,
             "experiment": exp,
             "seed": seed,
             "n": n,
             "E_rel": float(m.get("E_rel", np.nan)),
             "L2": float(m.get("L2", np.nan)),
             "integral": float(m.get("integral", np.nan)),
-            "train_time_sec": float(m.get("train_time_sec", np.nan)),
+            "noise_sigma": float(m.get("noise_sigma", 0.0)),
             "collapse": is_collapse(m),
             "path": fp,
         })
+    return rows
+
+
+def main():
+    # Ajusta esta ruta base según qué estés resumiendo:
+    # - baseline (sin ruido, OE1/Rayleigh puro):   "outputs/InfiniteWell/runs"
+    # - barrido de ruido (OE2):                     "outputs/InfiniteWell/noise/runs"
+    base_pattern = "outputs/InfiniteWell/noise/runs"
+
+    rows = []
+    for formulation in ["sin_rayleigh", "con_rayleigh"]:
+        found = collect_formulation(formulation, base_pattern)
+        print(f"{formulation}: {len(found)} archivos metrics.json encontrados")
+        rows.extend(found)
+
+    if not rows:
+        print(f"No encontré ningún metrics.json bajo {base_pattern}/{{formulation}}/")
+        return
 
     df = pd.DataFrame(rows)
-    df = df.sort_values(["experiment", "n", "seed"]).reset_index(drop=True)
-
-    # ---- Resumen por (experiment, n)
-    def agg_bool(x):  # colapsos totales
-        return int(np.sum(x))
+    df = df.sort_values(["formulation", "experiment", "n", "seed"]).reset_index(drop=True)
 
     summary = (
-        df.groupby(["experiment", "n"])
+        df.groupby(["formulation", "experiment", "n"])
           .agg(
               runs=("seed", "count"),
-              collapses=("collapse", agg_bool),
+              collapses=("collapse", lambda x: int(np.sum(x))),
               collapse_rate=("collapse", "mean"),
               E_rel_mean=("E_rel", "mean"),
               E_rel_std=("E_rel", "std"),
@@ -64,33 +74,21 @@ def main():
               L2_std=("L2", "std"),
               integral_mean=("integral", "mean"),
               integral_std=("integral", "std"),
-              time_mean=("train_time_sec", "mean"),
-              time_std=("train_time_sec", "std"),
           )
           .reset_index()
-          .sort_values(["experiment", "n"])
+          .sort_values(["formulation", "experiment", "n"])
     )
 
-    # ---- Guardar CSVs
     os.makedirs("outputs/summary", exist_ok=True)
-    df.to_csv("outputs/summary/all_runs.csv", index=False)
-    summary.to_csv("outputs/summary/summary_by_n.csv", index=False)
+    df.to_csv("outputs/summary/all_runs_noise.csv", index=False)
+    summary.to_csv("outputs/summary/summary_by_n_noise.csv", index=False)
 
-    # ---- Imprimir tabla corta en consola (solo n=10..20 si aplica)
-    print("\n=== SUMMARY (por n) ===")
+    print("\n=== SUMMARY (por formulation, experiment, n) ===")
     print(summary.to_string(index=False))
 
-    # También: mostrar dónde colapsó, para inspección rápida
-    collapsed = df[df["collapse"]].copy()
-    if len(collapsed) > 0:
-        print("\n=== Corridas colapsadas (para revisar) ===")
-        print(collapsed[["experiment", "seed", "n", "integral", "L2", "E_rel", "path"]].to_string(index=False))
-    else:
-        print("\nNo detecté colapsos con el criterio actual. (Puedes ajustar thresholds)")
-
     print("\nGuardado:")
-    print(" - outputs/summary/all_runs.csv")
-    print(" - outputs/summary/summary_by_n.csv")
+    print(" - outputs/summary/all_runs_noise.csv")
+    print(" - outputs/summary/summary_by_n_noise.csv")
 
 
 if __name__ == "__main__":
